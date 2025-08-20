@@ -4,6 +4,8 @@ import java.util.*;
 public class PanchayatData {
         // Map<BlockName, Map<PanchayatName, PanchayatCode>>
         static public final Map<String, Map<String, String>> DATA = new LinkedHashMap<>();
+        
+        static public final Map<String, String> blockMap = new HashMap<>();
 
         static public String norm(String s) { return s == null ? "" : s.trim().toUpperCase(); }
 
@@ -20,6 +22,7 @@ public class PanchayatData {
             }
             return null;
         }
+        
 
         static {
             // Register each block map
@@ -33,7 +36,19 @@ public class PanchayatData {
             DATA.put(norm("SAITU GAMPHAZOL"), SaituGamphazol.block());
             DATA.put(norm("T. VAICHONG TD BLOCK"), TVaichong.block());
             // If you add more blocks later, register them here in the same style.
+            
+            blockMap.put("BUNGTE CHIRU TD BLOCK", "2001015");
+            blockMap.put("CHAMPAI TD BLOCK", "2001010");
+            blockMap.put("ISLAND TD BLOCK", "2001012");
+            blockMap.put("KANGCHUP GELJANG TD BLOCK", "2001013");
+            blockMap.put("KANGPOKPI", "2001003");
+            blockMap.put("LHUNGTIN TD BLOCK", "2001014");
+            blockMap.put("SAIKUL", "2001004");
+            blockMap.put("SAITU GAMPHAZOL", "2001007");
+            blockMap.put("T. VAICHONG TD BLOCK", "2001011");
         }
+        
+
 
         // ====== Block: BUNGTE CHIRU TD BLOCK ======
         static final class BungteChiru {
