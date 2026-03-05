@@ -1,0 +1,250 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-chatbot-postgres
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ai_chatbot_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai-chatbot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    container_name: ai-chatbot-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - ai-chatbot-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: ai-chatbot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-chatbot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Eureka Service Registry
+  eureka-server:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_INSTANCE_HOSTNAME: eureka-server
+    volumes:
+      - ./eureka-server.jar:/app/eureka-server.jar
+    command: java -jar /app/eureka-server.jar
+    networks:
+      - ai-chatbot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Gateway
+  api-gateway:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      JWT_SECRET: your-super-secret-key-change-in-production-min-32-chars-long-xxx
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+    volumes:
+      - ./api-gateway.jar:/app/api-gateway.jar
+    command: java -jar /app/api-gateway.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+  # Auth Service
+  auth-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-auth
+    ports:
+      - "8081:8081"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      JWT_SECRET: your-super-secret-key-change-in-production-min-32-chars-long-xxx
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ai_chatbot_auth
+    volumes:
+      - ./auth-service.jar:/app/auth-service.jar
+    command: java -jar /app/auth-service.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+  # Payment Service
+  payment-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-payment
+    ports:
+      - "8082:8082"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ai_chatbot_payment
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+    volumes:
+      - ./payment-service.jar:/app/payment-service.jar
+    command: java -jar /app/payment-service.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+  # Document Service
+  document-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-document
+    ports:
+      - "8083:8083"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ai_chatbot_document
+      FILE_UPLOAD_DIR: /app/uploads
+    volumes:
+      - ./document-service.jar:/app/document-service.jar
+      - uploads:/app/uploads
+    command: java -jar /app/document-service.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+  # Embedding Service
+  embedding-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-embedding
+    ports:
+      - "8084:8084"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - ./embedding-service.jar:/app/embedding-service.jar
+    command: java -jar /app/embedding-service.jar
+    networks:
+      - ai-chatbot-network
+
+  # Chatbot Service
+  chatbot-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-chatbot
+    ports:
+      - "8085:8085"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ai_chatbot_chatbot
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - ./chatbot-service.jar:/app/chatbot-service.jar
+    command: java -jar /app/chatbot-service.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+  # Widget API Service
+  widget-api-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-widget
+    ports:
+      - "8086:8086"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      WIDGET_API_URL: http://localhost:8086/api/v1/widget
+    volumes:
+      - ./widget-api-service.jar:/app/widget-api-service.jar
+    command: java -jar /app/widget-api-service.jar
+    networks:
+      - ai-chatbot-network
+
+  # User Service
+  user-service:
+    image: openjdk:17-jdk-slim
+    container_name: ai-chatbot-user
+    ports:
+      - "8087:8087"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka
+      DB_HOST: postgres
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: ai_chatbot_user
+    volumes:
+      - ./user-service.jar:/app/user-service.jar
+    command: java -jar /app/user-service.jar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai-chatbot-network
+
+volumes:
+  postgres_data:
+  elasticsearch_data:
+  redis_data:
+  uploads:
+
+networks:
+  ai-chatbot-network:
+    driver: bridge
+
